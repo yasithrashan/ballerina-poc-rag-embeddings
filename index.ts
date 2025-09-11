@@ -1,12 +1,11 @@
-import { readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { readdirSync, readFileSync, statSync } from "fs";
 import path from "path";
 
 interface Chunk {
-  type: string;        // import, variable, function_signature, function_body, service, resource_signature, resource_body
-  id: string;          // unique ID for each chunk
+  type: string;        // import, variable, function_signature, function_body, service_signature, service_body, resource_signature, resource_body
   name?: string;       // function/resource/service name
   content: string;     // code snippet
-  meta: any;           // metadata: parameters, returnType, part, servicePath, etc.
+  meta: any;           // metadata: parameters, returnType, file, startLine, endLine, servicePath, resourcePath
 }
 
 // Load all .bal files recursively
@@ -23,114 +22,117 @@ function loadBallerinaFiles(dir: string): string[] {
   return files;
 }
 
-// Read file contents
-function readFileContents(files: string[]): string[] {
-  return files.map(filePath => readFileSync(filePath, "utf8"));
-}
-
-// Generate unique ID
-let chunkCounter = 0;
-function generateId(): string {
-  chunkCounter++;
-  return `chunk_${chunkCounter}`;
+// Utility: get line number of match in code
+function getLineNumber(code: string, index: number): number {
+  return code.slice(0, index).split("\n").length;
 }
 
 // Chunk a single Ballerina file
-function chunkBallerinaCode(code: string): Chunk[] {
+function chunkBallerinaCode(filePath: string, code: string): Chunk[] {
   const chunks: Chunk[] = [];
 
-  // Imports
+  // 1️⃣ Imports
   const importRegex = /^import\s+[^\n;]+;/gm;
   let match: RegExpExecArray | null;
   while ((match = importRegex.exec(code)) !== null) {
-    chunks.push({ type: "import", id: generateId(), content: match[0], meta: {} });
+    const startLine = getLineNumber(code, match.index);
+    chunks.push({
+      type: "import",
+      content: match[0],
+      meta: { file: filePath, line: startLine }
+    });
   }
 
-  // Variables
+  // 2️⃣ Variables
   const varRegex = /^(configurable\s+\w+\s+\w+\s*=\s*[^;]+;|(?:int|boolean|string|map<[^>]+>)\s+\w+\s*=\s*[^;]+;)/gm;
   while ((match = varRegex.exec(code)) !== null) {
-    chunks.push({ type: "variable", id: generateId(), content: match[0], meta: {} });
+    const startLine = getLineNumber(code, match.index);
+    chunks.push({
+      type: "variable",
+      content: match[0],
+      meta: { file: filePath, line: startLine }
+    });
   }
 
-  // Functions
+  // 3️⃣ Functions
   const funcRegex = /function\s+(\w+)\s*\(([^)]*)\)\s*returns\s*([^{]*)\{([\s\S]*?)\n\}/gm;
   while ((match = funcRegex.exec(code)) !== null) {
-    const funcId = generateId();
     const name = match[1] ?? "unknown_function";
     const params = match[2] ?? "";
     const returnType = match[3] ?? "void";
     const body = match[4] ?? "";
+    const startLine = getLineNumber(code, match.index);
+    const endLine = getLineNumber(code, match.index + match[0].length);
 
-    // Signature
+    // Function signature
     chunks.push({
       type: "function_signature",
-      id: funcId,
       name,
       content: `function ${name}(${params}) returns ${returnType.trim()} {...}`,
-      meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim() }
+      meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim(), file: filePath, startLine, endLine }
     });
 
-    // Body
-    const MAX_BODY_LENGTH = 300;
-    for (let i = 0; i < body.length; i += MAX_BODY_LENGTH) {
-      chunks.push({
-        type: "function_body",
-        id: funcId,
-        name,
-        content: body.slice(i, i + MAX_BODY_LENGTH),
-        meta: { part: Math.floor(i / MAX_BODY_LENGTH) + 1 }
-      });
-    }
+    // Function body
+    chunks.push({
+      type: "function_body",
+      name,
+      content: body,
+      meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim(), file: filePath, startLine, endLine }
+    });
   }
 
-  // Services & resource functions
+  // 4️⃣ Services & resource functions
   const serviceRegex = /service\s+\/([\w\d_-]+)\s+on\s+new\s+http:Listener\([^)]+\)\s*\{([\s\S]*?)\n\}/gm;
-  let serviceMatch: RegExpExecArray | null;
-  while ((serviceMatch = serviceRegex.exec(code)) !== null) {
-    const servicePath = serviceMatch[1] ?? "unknown_service";
-    const serviceBody = serviceMatch[2] ?? "";
-    const serviceFullCode = serviceMatch[0]; // full service including resources
-    const serviceId = generateId();
+  while ((match = serviceRegex.exec(code)) !== null) {
+    const servicePath = match[1] ?? "unknown_service";
+    const serviceFullCode = match[0];
+    const serviceBody = match[2] ?? "";
+    const startLine = getLineNumber(code, match.index);
+    const endLine = getLineNumber(code, match.index + match[0].length);
 
-    // Full service chunk
+    // Service signature
     chunks.push({
-      type: "service",
-      id: serviceId,
+      type: "service_signature",
+      name: servicePath,
+      content: `service /${servicePath} {...}`,
+      meta: { file: filePath, startLine, endLine }
+    });
+
+    // Service body
+    chunks.push({
+      type: "service_body",
       name: servicePath,
       content: serviceFullCode,
-      meta: { servicePath }
+      meta: { file: filePath, startLine, endLine }
     });
 
     // Resource functions inside service
     const resourceRegex = /resource function\s+(\w+)\s+([\w\[\]\/]*)\s*\(([^)]*)\)(?:\s*returns\s*([^{]+))?\s*\{([\s\S]*?)\n\}/gm;
     let resourceMatch: RegExpExecArray | null;
     while ((resourceMatch = resourceRegex.exec(serviceBody)) !== null) {
-      const resourceId = generateId();
       const method = resourceMatch[1] ?? "unknown_method";
       const path = resourceMatch[2] ?? "";
       const params = resourceMatch[3] ?? "";
       const returnType = resourceMatch[4] ?? "void";
       const body = resourceMatch[5] ?? "";
+      const resStartLine = getLineNumber(serviceBody, resourceMatch.index);
+      const resEndLine = getLineNumber(serviceBody, resourceMatch.index + resourceMatch[0].length);
 
-      // Signature
+      // Resource signature
       chunks.push({
         type: "resource_signature",
-        id: resourceId,
         name: `${method} ${path}`,
         content: `resource function ${method} ${path}(${params}) returns ${returnType.trim()} {...}`,
-        meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim(), servicePath }
+        meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim(), file: filePath, startLine: resStartLine, endLine: resEndLine, servicePath }
       });
 
-      // Body
-      for (let i = 0; i < body.length; i += 300) {
-        chunks.push({
-          type: "resource_body",
-          id: resourceId,
-          name: `${method} ${path}`,
-          content: body.slice(i, i + 300),
-          meta: { part: Math.floor(i / 300) + 1, servicePath }
-        });
-      }
+      // Resource body
+      chunks.push({
+        type: "resource_body",
+        name: `${method} ${path}`,
+        content: body,
+        meta: { parameters: params.split(",").map(p => p.trim()), returnType: returnType.trim(), file: filePath, startLine: resStartLine, endLine: resEndLine, servicePath }
+      });
     }
   }
 
@@ -139,23 +141,12 @@ function chunkBallerinaCode(code: string): Chunk[] {
 
 // ===== Main =====
 const files = loadBallerinaFiles("./ballerina");
-const fileContents = readFileContents(files);
-
 let allChunks: Chunk[] = [];
-for (const content of fileContents) {
-  allChunks = allChunks.concat(chunkBallerinaCode(content));
+
+for (const file of files) {
+  const content = readFileSync(file, "utf8");
+  allChunks = allChunks.concat(chunkBallerinaCode(file, content));
 }
 
-// Print all chunks
+// Print chunks JSON only
 console.log(JSON.stringify(allChunks, null, 2));
-
-// Optional: save to bal.md
-const markdownContent = allChunks.map(chunk => {
-  let md = `### ${chunk.type.toUpperCase()} | ID: ${chunk.id}`;
-  if (chunk.name) md += ` | Name: ${chunk.name}`;
-  md += `\n\n\`\`\`ballerina\n${chunk.content.trim()}\n\`\`\`\n`;
-  return md;
-}).join("\n");
-
-writeFileSync("bal.md", markdownContent);
-console.log("\nAll chunks written to bal.md");

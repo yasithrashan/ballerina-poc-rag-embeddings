@@ -596,7 +596,7 @@ async function main() {
         console.log("  bun run .                    # Run default pipeline");
         console.log("  bun run . index [dir]        # Index a specific dir");
         console.log("  bun run . chunk [dir]        # Only chunk and save to JSON");
-        console.log("  bun run . query \"q\" [n]      # Query with text");
+        console.log("  bun run . query \"q\" [n]    # Query with text");
         console.log("  bun run . queries [file] [n] # Process queries from file");
         console.log("  bun run . info               # Show Qdrant info");
     }

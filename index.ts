@@ -439,6 +439,87 @@ class BallerinaRAGSystem {
   }
 }
 
+// Process user queries from text file
+async function processUserQueries(ragSystem: BallerinaRAGSystem, queriesFilePath: string, limit: number = 5): Promise<void> {
+  try {
+    if (!statSync(queriesFilePath).isFile()) {
+      console.error(`File not found: ${queriesFilePath}`);
+      return;
+    }
+
+    const fileContent = readFileSync(queriesFilePath, "utf-8");
+    const queries = fileContent
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith("#")) // Filter out empty lines and comments
+      .map((line, index) => {
+        // Remove numbering if present (e.g., "1.Can you..." -> "Can you...")
+        const cleanedQuery = line.replace(/^\d+\.\s*/, "");
+        return { index: index + 1, query: cleanedQuery };
+      });
+
+    if (queries.length === 0) {
+      console.log("No queries found in the file.");
+      return;
+    }
+
+    console.log(`\nFound ${queries.length} queries to process:`);
+    queries.forEach(({ index, query }) => {
+      console.log(`${index}. ${query.substring(0, 100)}${query.length > 100 ? "..." : ""}`);
+    });
+
+    console.log("\n" + "=".repeat(80));
+    console.log("Starting query processing...");
+    console.log("=".repeat(80) + "\n");
+
+    let queryIndex = 0;
+    while (queryIndex < queries.length) {
+      const currentQuery = queries[queryIndex];
+      if (!currentQuery) {
+        console.log("No more queries to process.");
+        break;
+      }
+      const { index, query } = currentQuery;
+
+      console.log(`\nProcessing Query ${index}:`);
+      console.log(`"${query}"`);
+      console.log("-".repeat(60));
+
+      try {
+        const startTime = Date.now();
+        const contextFilePath = await ragSystem.saveContextToFile(
+          query,
+          limit,
+          `context_files/query_${index}`
+        );
+        const endTime = Date.now();
+
+        console.log(`Query ${index} completed in ${endTime - startTime}ms`);
+        console.log(`Context saved to: ${contextFilePath}`);
+
+        // Add a small delay between queries to avoid overwhelming the API
+        if (queryIndex < queries.length - 1) {
+          console.log("Waiting 2 seconds before next query...");
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+      } catch (error) {
+        console.error(`Error processing query ${index}:`, error);
+        console.log("Continuing with next query...");
+      }
+
+      queryIndex++;
+    }
+
+    console.log("\n" + "=".repeat(80));
+    console.log(`Completed processing all ${queries.length} queries!`);
+    console.log("=".repeat(80));
+
+  } catch (error) {
+    console.error("Error processing user queries file:", error);
+  }
+}
+
 // Usage example and CLI interface
 async function main() {
   const voyageApiKey = process.env.VOYAGE_API_KEY;
@@ -462,11 +543,21 @@ async function main() {
       console.log(`No command provided. Running default pipeline...`);
       await ragSystem.indexChunks(ballerinaDir);
 
-      // User query
-      const defaultQuery = process.env.DEFAULT_QUERY || "list all functions";
-      console.log(`Running default query: "${defaultQuery}"`);
-      await ragSystem.saveContextToFile(defaultQuery, 5);
-      console.log("Finished indexing and saved default context file.");
+      // Check if user_queries.txt exists and process it
+      const queriesFile = "user_queries.txt";
+      try {
+        if (statSync(queriesFile).isFile()) {
+          console.log(`\nFound ${queriesFile}, processing user queries...`);
+          await processUserQueries(ragSystem, queriesFile, 5);
+        }
+      } catch (error) {
+        // File doesn't exist, run default query
+        const defaultQuery = process.env.DEFAULT_QUERY || "list all functions";
+        console.log(`Running default query: "${defaultQuery}"`);
+        await ragSystem.saveContextToFile(defaultQuery, 5);
+      }
+
+      console.log("Finished processing!");
       return;
     }
 
@@ -488,6 +579,13 @@ async function main() {
         await ragSystem.saveContextToFile(arg1, parseInt(arg2 ?? "5"));
         break;
 
+      case "queries":
+        // New command to process queries from file
+        const queriesFile = arg1 || "user_queries.txt";
+        const limit = parseInt(arg2 ?? "5");
+        await processUserQueries(ragSystem, queriesFile, limit);
+        break;
+
       case "info":
         const info = await ragSystem.getCollectionInfo();
         console.log("Collection info:", JSON.stringify(info, null, 2));
@@ -495,11 +593,12 @@ async function main() {
 
       default:
         console.log("Usage:");
-        console.log("  bun run .               # Run default pipeline");
-        console.log("  bun run . index [dir]   # Index a specific dir");
-        console.log("  bun run . chunk [dir]   # Only chunk and save to JSON");
-        console.log("  bun run . query \"q\" [n] # Query with text");
-        console.log("  bun run . info          # Show Qdrant info");
+        console.log("  bun run .                    # Run default pipeline");
+        console.log("  bun run . index [dir]        # Index a specific dir");
+        console.log("  bun run . chunk [dir]        # Only chunk and save to JSON");
+        console.log("  bun run . query \"q\" [n]      # Query with text");
+        console.log("  bun run . queries [file] [n] # Process queries from file");
+        console.log("  bun run . info               # Show Qdrant info");
     }
   } catch (error) {
     console.error("Error:", error);

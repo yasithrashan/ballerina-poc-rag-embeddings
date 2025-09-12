@@ -287,20 +287,14 @@ class BallerinaRAGSystem {
       chunks: chunks
     };
 
-    // Save with full formatting (no truncation)
     writeFileSync(filepath, JSON.stringify(jsonOutput, null, 2), "utf-8");
-    console.log(`Chunks saved to JSON: ${filepath}`);
-    console.log(`Total chunks generated: ${chunks.length}`);
 
-    // Print summary of chunk types
-    const stats = this.getChunkTypesStatistics(chunks);
-    console.log("Chunk types breakdown:");
-    Object.entries(stats).forEach(([type, count]) => {
-      console.log(`  ${type}: ${count}`);
-    });
+    console.log(`File saved: ${filepath}`);
 
     return filepath;
   }
+
+
 
   // Get statistics about chunk types - updated for new structure
   private getChunkTypesStatistics(chunks: Chunk[]): Record<string, number> {
@@ -480,32 +474,18 @@ class BallerinaRAGSystem {
     const filename = `context_${sanitizedQuery}_${timestamp}.txt`;
     const filepath = path.join(outputDir, filename);
 
-    let contextContent = `Query: ${userQuery}\n`;
-    contextContent += `Generated at: ${new Date().toISOString()}\n`;
-    contextContent += `Number of relevant chunks: ${results.length}\n`;
-    contextContent += "=".repeat(80) + "\n\n";
-
+    let contextContent = `Query: ${userQuery}\nGenerated at: ${new Date().toISOString()}\n\n`;
     results.forEach((result, index) => {
-      const payload = result.payload;
-      contextContent += `CHUNK ${index + 1} (Score: ${result.score.toFixed(4)})\n`;
-      contextContent += "-".repeat(50) + "\n";
-      contextContent += `Type: ${payload.metadata.type}\n`;
-      if (payload.metadata.name) contextContent += `Name: ${payload.metadata.name}\n`;
-      if (payload.metadata?.file) contextContent += `File: ${payload.metadata.file}\n`;
-      if (payload.metadata?.line) {
-        contextContent += `Line: ${payload.metadata.line}${payload.metadata?.endLine ? `-${payload.metadata.endLine}` : ""}\n`;
-      }
-      if (payload.metadata?.servicePath) contextContent += `Service: ${payload.metadata.servicePath}\n`;
-      if (payload.metadata?.httpMethod) contextContent += `HTTP Method: ${payload.metadata.httpMethod}\n`;
-
-      contextContent += `\nContent:\n${payload.content}\n\n`;
-      contextContent += "=".repeat(80) + "\n\n";
+      contextContent += result.payload.content + "\n\n";
     });
 
     writeFileSync(filepath, contextContent, "utf-8");
-    console.log(`Context saved to: ${filepath}`);
+
+    console.log(`Query matches saved: ${filepath}`);
+
     return filepath;
   }
+
 
   async getCollectionInfo(): Promise<any> {
     return await this.qdrantClient.getCollection(this.collectionName);
@@ -515,81 +495,28 @@ class BallerinaRAGSystem {
 // Process user queries from text file
 async function processUserQueries(ragSystem: BallerinaRAGSystem, queriesFilePath: string, limit: number = 5): Promise<void> {
   try {
-    if (!statSync(queriesFilePath).isFile()) {
-      console.error(`File not found: ${queriesFilePath}`);
-      return;
-    }
+    if (!statSync(queriesFilePath).isFile()) return;
 
     const fileContent = readFileSync(queriesFilePath, "utf-8");
     const queries = fileContent
       .split(/\r?\n/)
       .map(line => line.trim())
-      .filter(line => line && !line.startsWith("#"))
-      .map((line, index) => {
-        const cleanedQuery = line.replace(/^\d+\.\s*/, "");
-        return { index: index + 1, query: cleanedQuery };
-      });
+      .filter(line => line && !line.startsWith("#"));
 
-    if (queries.length === 0) {
-      console.log("No queries found in the file.");
-      return;
+    for (let i = 0; i < queries.length; i++) {
+      const query = queries[i];
+      await ragSystem.saveContextToFile(
+        query ?? "",
+        limit,
+        `context_files/query_${i + 1}`
+      );
     }
-
-    console.log(`\nFound ${queries.length} queries to process:`);
-    queries.forEach(({ index, query }) => {
-      console.log(`${index}. ${query.substring(0, 100)}${query.length > 100 ? "..." : ""}`);
-    });
-
-    console.log("\n" + "=".repeat(80));
-    console.log("Starting query processing...");
-    console.log("=".repeat(80) + "\n");
-
-    let queryIndex = 0;
-    while (queryIndex < queries.length) {
-      const currentQuery = queries[queryIndex];
-      if (!currentQuery) {
-        console.log("No more queries to process.");
-        break;
-      }
-      const { index, query } = currentQuery;
-
-      console.log(`\nProcessing Query ${index}:`);
-      console.log(`"${query}"`);
-      console.log("-".repeat(60));
-
-      try {
-        const startTime = Date.now();
-        const contextFilePath = await ragSystem.saveContextToFile(
-          query,
-          limit,
-          `context_files/query_${index}`
-        );
-        const endTime = Date.now();
-
-        console.log(`Query ${index} completed in ${endTime - startTime}ms`);
-        console.log(`Context saved to: ${contextFilePath}`);
-
-        if (queryIndex < queries.length - 1) {
-          console.log("Waiting 2 seconds before next query...");
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-
-      } catch (error) {
-        console.error(`Error processing query ${index}:`, error);
-        console.log("Continuing with next query...");
-      }
-
-      queryIndex++;
-    }
-
-    console.log("\n" + "=".repeat(80));
-    console.log(`Completed processing all ${queries.length} queries!`);
-    console.log("=".repeat(80));
-
   } catch (error) {
-    console.error("Error processing user queries file:", error);
+    console.error(error);
   }
 }
+
+
 
 // Usage example and CLI interface
 async function main() {

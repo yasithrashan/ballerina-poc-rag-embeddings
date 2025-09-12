@@ -3,10 +3,14 @@ import path from "path";
 import { QdrantClient } from "@qdrant/js-client-rest";
 
 interface Chunk {
-  type: string;
-  name?: string;
   content: string;
-  meta: any;
+  metadata: {
+    type: string;
+    name: string | null;
+    line: number;
+    file: string;
+    [key: string]: any;
+  };
 }
 
 interface VoyageEmbeddingResponse {
@@ -28,7 +32,7 @@ class BallerinaRAGSystem {
   constructor(qdrantUrl: string = "http://localhost:6333", voyageApiKey: string) {
     this.qdrantClient = new QdrantClient({
       url: qdrantUrl,
-      checkCompatibility: false // prevent version check error
+      checkCompatibility: false
     });
     this.voyageApiKey = voyageApiKey;
   }
@@ -57,153 +61,213 @@ class BallerinaRAGSystem {
     return code.slice(0, index).split(/\r?\n/).length;
   }
 
-  // Chunk Ballerina code into logical parts
+  // Improved chunking logic for Ballerina code
   private chunkBallerinaCode(code: string, filePath: string): Chunk[] {
     const chunks: Chunk[] = [];
     let match: RegExpExecArray | null;
 
-    // Imports
+    // 1. Import statements
     const importRegex = /import\s+[^;]+;/g;
     while ((match = importRegex.exec(code)) !== null) {
       const startLine = this.getLineNumber(code, match.index);
       chunks.push({
-        type: "import",
         content: match[0],
-        meta: { file: filePath, line: startLine }
+        metadata: {
+          type: "import",
+          name: null,
+          line: startLine,
+          file: path.basename(filePath)
+        }
       });
     }
 
-    // Configurable variables
+    // 2. Configurable variables
     const configurableRegex = /configurable\s+[\w:]+\s+\w+\s*=\s*[^;]+;/g;
     while ((match = configurableRegex.exec(code)) !== null) {
       const startLine = this.getLineNumber(code, match.index);
+      const variableMatch = match[0].match(/configurable\s+[\w:]+\s+(\w+)/);
+      const variableName = variableMatch ? variableMatch[1] : null;
+
       chunks.push({
-        type: "configurable_variable",
         content: match[0],
-        meta: { file: filePath, line: startLine }
+        metadata: {
+          type: "configurable_variable",
+          name: variableName ?? null,
+          line: startLine,
+          file: path.basename(filePath)
+        }
       });
     }
 
-    // Module-level variables
-    const moduleVariableRegex = /^(?!.*(?:function|service|resource)).*?(?:final\s+)?[\w:]+\s+\w+\s*=\s*[^;]+;/gm;
+    // 3. Module-level variables
+    const moduleVariableRegex = /^(?!.*(?:function|service|resource|type|import|configurable)).*?(?:final\s+)?[\w:]+\s+(\w+)\s*=\s*[^;]+;/gm;
     while ((match = moduleVariableRegex.exec(code)) !== null) {
       const startLine = this.getLineNumber(code, match.index);
+      const variableMatch = match[0].match(/(?:final\s+)?[\w:]+\s+(\w+)/);
+      const variableName = variableMatch ? variableMatch[1] : null;
+
       chunks.push({
-        type: "module_variable",
         content: match[0].trim(),
-        meta: { file: filePath, line: startLine }
+        metadata: {
+          type: "module_variable",
+          name: variableName ?? null,
+          line: startLine,
+          file: path.basename(filePath)
+        }
       });
     }
 
-    // Type definitions and records
-    const typeRegex = /(public\s+)?type\s+(\w+)\s+([^;]+;|record\s*\{[^}]*\};?)/g;
+    // 4. Type definitions (including records, enums, classes)
+    const typeRegex = /(public\s+)?(type\s+(\w+)\s+([^;{]+(?:;|\{[^}]*\}));?)/g;
     while ((match = typeRegex.exec(code)) !== null) {
-      const typeName = match[2];
+      const typeName = match[3];
       const startLine = this.getLineNumber(code, match.index);
+
       chunks.push({
-        type: "type_definition",
-        name: typeName,
-        content: match[0],
-        meta: { file: filePath, line: startLine }
+        content: match[2] ?? "",
+        metadata: {
+          type: "type_definition",
+          name: typeName ?? null,
+          line: startLine,
+          file: path.basename(filePath),
+          visibility: match[1] ? "public" : "private"
+        }
       });
     }
 
-    // Functions
-    const functionRegex = /^(?!.*resource).*?function\s+(\w+)\s*\(([^)]*)\)(?:\s+returns\s*([^\{]+))?\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/gm;
+    // 5. Standalone functions (not inside services)
+    const functionRegex = /^(?!.*resource).*?((?:public\s+)?function\s+(\w+)\s*\(([^)]*)\)(?:\s+returns\s*([^\{]+))?\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\})/gm;
     while ((match = functionRegex.exec(code)) !== null) {
-      const name = match[1] ?? "unknown_function";
-      const params = match[2] ?? "";
-      const returnType = (match[3] ?? "").trim();
-      const body = match[4] ?? "";
+      // Check if this function is inside a service by looking backwards
+      const beforeFunction = code.substring(0, match.index);
+      const lastServiceStart = beforeFunction.lastIndexOf('service');
+      const lastServiceEnd = beforeFunction.lastIndexOf('}');
+
+      // Skip if function is inside a service
+      if (lastServiceStart > lastServiceEnd && lastServiceStart !== -1) {
+        continue;
+      }
+
+      const functionName = match[2];
+      const params = match[3] || "";
+      const returnType = (match[4] || "").trim();
+      const body = match[5] || "";
       const startLine = this.getLineNumber(code, match.index);
       const endLine = this.getLineNumber(code, match.index + match[0].length);
 
       chunks.push({
-        type: "function_signature",
-        name,
-        content: `function ${name}(${params})${returnType ? ` returns ${returnType}` : ""}`,
-        meta: {
+        content: match[1] ?? "",
+        metadata: {
+          type: "function",
+          name: functionName ?? null,
+          line: startLine,
+          file: path.basename(filePath),
+          endLine,
           parameters: params.split(",").map(p => p.trim()).filter(Boolean),
           returnType: returnType || "void",
-          file: filePath,
-          startLine,
-          endLine
-        }
-      });
-
-      chunks.push({
-        type: "function_body",
-        name,
-        content: body.trim(),
-        meta: {
-          parameters: params.split(",").map(p => p.trim()).filter(Boolean),
-          returnType: returnType || "void",
-          file: filePath,
-          startLine,
-          endLine
+          visibility: match[1] && match[1].includes("public") ? "public" : "private"
         }
       });
     }
 
-    // Services
-    const serviceRegex = /service\s+(\/[\w\d_/-]*|\w+)(?:\s+on\s+[^{]+)?\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
+    // 6. Services and their resources
+    const serviceRegex = /service\s+(\/[\w\d_/-]*|\w+)(?:\s+on\s+([^{]+))?\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
     while ((match = serviceRegex.exec(code)) !== null) {
-      const servicePath = match[1]?.replace(/^\//, "") ?? "unknown_service";
-      const serviceBody = match[2] ?? "";
+      const servicePath = match[1];
+      const listener = match[2] ? match[2].trim() : null;
+      const serviceBody = match[3] || "";
       const startLine = this.getLineNumber(code, match.index);
-      const endLine = this.getLineNumber(code, match.index + match[0].length);
 
+      // Add service definition as a chunk
       chunks.push({
-        type: "service_signature",
-        name: servicePath,
-        content: `service ${match[1]}`,
-        meta: { file: filePath, startLine, endLine }
+        content: `service ${servicePath}${listener ? ` on ${listener}` : ""}`,
+        metadata: {
+          type: "service",
+          name: (servicePath ?? "").replace(/^\//, "") || "unnamed_service",
+          line: startLine,
+          file: path.basename(filePath),
+          path: servicePath,
+          listener: listener
+        }
       });
 
+      // Extract resources from service body
       const resourceRegex = /resource\s+function\s+(\w+)\s+([^\s(]*)\s*\(([^)]*)\)(?:\s*returns\s*([^\{]+))?\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
       let resourceMatch: RegExpExecArray | null;
 
       while ((resourceMatch = resourceRegex.exec(serviceBody)) !== null) {
-        const method = resourceMatch[1] ?? "unknown_method";
-        const pathPart = resourceMatch[2] ?? "";
-        const params = resourceMatch[3] ?? "";
-        const returnType = (resourceMatch[4] ?? "").trim();
-        const body = resourceMatch[5] ?? "";
+        const httpMethod = resourceMatch[1];
+        const pathPart = resourceMatch[2] || "";
+        const params = resourceMatch[3] || "";
+        const returnType = (resourceMatch[4] || "").trim();
+        const body = resourceMatch[5] || "";
 
-        const resourceName = `${method} ${pathPart}`.trim();
+        // Calculate line number relative to the service body
+        const resourceStartInService = resourceMatch.index;
+        const serviceBodyStartLine = startLine + 1; // Service body starts after the service declaration
+        const resourceLine = serviceBodyStartLine + serviceBody.substring(0, resourceStartInService).split('\n').length - 1;
 
-        chunks.push({
-          type: "resource_signature",
-          name: resourceName,
-          content: `resource function ${method} ${pathPart}(${params})${returnType ? ` returns ${returnType}` : ""}`,
-          meta: {
-            parameters: params.split(",").map(p => p.trim()).filter(Boolean),
-            returnType: returnType || "void",
-            file: filePath,
-            servicePath: servicePath,
-            httpMethod: method
-          }
-        });
+        const resourceName = `${httpMethod} ${pathPart}`.trim();
+        const fullPath = servicePath + (pathPart.startsWith('/') ? pathPart : `/${pathPart}`);
 
         chunks.push({
-          type: "resource_body",
-          name: resourceName,
-          content: body.trim(),
-          meta: {
-            parameters: params.split(",").map(p => p.trim()).filter(Boolean),
-            returnType: returnType || "void",
-            file: filePath,
+          content: `resource function ${httpMethod} ${pathPart}(${params})${returnType ? ` returns ${returnType}` : ""} {\n${body.trim()}\n}`,
+          metadata: {
+            type: "resource",
+            name: resourceName,
+            line: resourceLine,
+            file: path.basename(filePath),
             servicePath: servicePath,
-            httpMethod: method
+            serviceListener: listener,
+            httpMethod: httpMethod,
+            resourcePath: pathPart,
+            fullPath: fullPath,
+            parameters: params.split(",").map(p => p.trim()).filter(Boolean),
+            returnType: returnType || "void"
           }
         });
       }
     }
 
+    // 7. Classes and class methods
+    const classRegex = /((?:public\s+)?class\s+(\w+)(?:\s*\{[^}]*\}|\s*;))/g;
+    while ((match = classRegex.exec(code)) !== null) {
+      const className = match[2];
+      const startLine = this.getLineNumber(code, match.index);
+
+      chunks.push({
+        content: match[1] ?? "",
+        metadata: {
+          type: "class",
+          name: className ?? null,
+          line: startLine,
+          file: path.basename(filePath),
+          visibility: match[1] && match[1].includes("public") ? "public" : "private"
+        }
+      });
+    }
+
+    // 8. Constants and final variables
+    const constantRegex = /^(final\s+[\w:]+\s+(\w+)\s*=\s*[^;]+;)/gm;
+    while ((match = constantRegex.exec(code)) !== null) {
+      const constantName = match[2];
+      const startLine = this.getLineNumber(code, match.index);
+
+      chunks.push({
+        content: match[1] ?? "",
+        metadata: {
+          type: "constant",
+          name: constantName ?? null,
+          line: startLine,
+          file: path.basename(filePath)
+        }
+      });
+    }
+
     return chunks;
   }
 
-  // Save chunks to JSON file in tests folder
+  // Save chunks to JSON file in tests folder with full output
   private saveChunksToJson(chunks: Chunk[], ballerinaDir: string): string {
     const testsDir = "tests";
     mkdirSync(testsDir, { recursive: true });
@@ -223,16 +287,26 @@ class BallerinaRAGSystem {
       chunks: chunks
     };
 
+    // Save with full formatting (no truncation)
     writeFileSync(filepath, JSON.stringify(jsonOutput, null, 2), "utf-8");
     console.log(`Chunks saved to JSON: ${filepath}`);
+    console.log(`Total chunks generated: ${chunks.length}`);
+
+    // Print summary of chunk types
+    const stats = this.getChunkTypesStatistics(chunks);
+    console.log("Chunk types breakdown:");
+    Object.entries(stats).forEach(([type, count]) => {
+      console.log(`  ${type}: ${count}`);
+    });
+
     return filepath;
   }
 
-  // Get statistics about chunk types
+  // Get statistics about chunk types - updated for new structure
   private getChunkTypesStatistics(chunks: Chunk[]): Record<string, number> {
     const stats: Record<string, number> = {};
     chunks.forEach(chunk => {
-      stats[chunk.type] = (stats[chunk.type] || 0) + 1;
+      stats[chunk.metadata.type] = (stats[chunk.metadata.type] || 0) + 1;
     });
     return stats;
   }
@@ -299,14 +373,15 @@ class BallerinaRAGSystem {
     }
   }
 
+  // Updated to use new chunk structure
   private prepareTextForEmbedding(chunk: Chunk): string {
-    let text = `Type: ${chunk.type}\n`;
+    let text = `Type: ${chunk.metadata.type}\n`;
 
-    if (chunk.name) text += `Name: ${chunk.name}\n`;
-    if (chunk.meta?.servicePath) text += `Service: ${chunk.meta.servicePath}\n`;
-    if (chunk.meta?.httpMethod) text += `HTTP Method: ${chunk.meta.httpMethod}\n`;
-    if (chunk.meta?.returnType && chunk.meta.returnType !== "void") {
-      text += `Returns: ${chunk.meta.returnType}\n`;
+    if (chunk.metadata.name) text += `Name: ${chunk.metadata.name}\n`;
+    if (chunk.metadata?.servicePath) text += `Service: ${chunk.metadata.servicePath}\n`;
+    if (chunk.metadata?.httpMethod) text += `HTTP Method: ${chunk.metadata.httpMethod}\n`;
+    if (chunk.metadata?.returnType && chunk.metadata.returnType !== "void") {
+      text += `Returns: ${chunk.metadata.returnType}\n`;
     }
 
     text += `Content:\n${chunk.content}`;
@@ -345,10 +420,8 @@ class BallerinaRAGSystem {
             id: i + index + 1,
             vector: embedding,
             payload: {
-              type: chunk.type,
-              name: chunk.name || null,
               content: chunk.content,
-              meta: chunk.meta,
+              metadata: chunk.metadata,
               text_for_embedding: texts[index] || ""
             }
           };
@@ -416,14 +489,14 @@ class BallerinaRAGSystem {
       const payload = result.payload;
       contextContent += `CHUNK ${index + 1} (Score: ${result.score.toFixed(4)})\n`;
       contextContent += "-".repeat(50) + "\n";
-      contextContent += `Type: ${payload.type}\n`;
-      if (payload.name) contextContent += `Name: ${payload.name}\n`;
-      if (payload.meta?.file) contextContent += `File: ${payload.meta.file}\n`;
-      if (payload.meta?.startLine) {
-        contextContent += `Line: ${payload.meta.startLine}${payload.meta?.endLine ? `-${payload.meta.endLine}` : ""}\n`;
+      contextContent += `Type: ${payload.metadata.type}\n`;
+      if (payload.metadata.name) contextContent += `Name: ${payload.metadata.name}\n`;
+      if (payload.metadata?.file) contextContent += `File: ${payload.metadata.file}\n`;
+      if (payload.metadata?.line) {
+        contextContent += `Line: ${payload.metadata.line}${payload.metadata?.endLine ? `-${payload.metadata.endLine}` : ""}\n`;
       }
-      if (payload.meta?.servicePath) contextContent += `Service: ${payload.meta.servicePath}\n`;
-      if (payload.meta?.httpMethod) contextContent += `HTTP Method: ${payload.meta.httpMethod}\n`;
+      if (payload.metadata?.servicePath) contextContent += `Service: ${payload.metadata.servicePath}\n`;
+      if (payload.metadata?.httpMethod) contextContent += `HTTP Method: ${payload.metadata.httpMethod}\n`;
 
       contextContent += `\nContent:\n${payload.content}\n\n`;
       contextContent += "=".repeat(80) + "\n\n";
@@ -451,9 +524,8 @@ async function processUserQueries(ragSystem: BallerinaRAGSystem, queriesFilePath
     const queries = fileContent
       .split(/\r?\n/)
       .map(line => line.trim())
-      .filter(line => line && !line.startsWith("#")) // Filter out empty lines and comments
+      .filter(line => line && !line.startsWith("#"))
       .map((line, index) => {
-        // Remove numbering if present (e.g., "1.Can you..." -> "Can you...")
         const cleanedQuery = line.replace(/^\d+\.\s*/, "");
         return { index: index + 1, query: cleanedQuery };
       });
@@ -497,7 +569,6 @@ async function processUserQueries(ragSystem: BallerinaRAGSystem, queriesFilePath
         console.log(`Query ${index} completed in ${endTime - startTime}ms`);
         console.log(`Context saved to: ${contextFilePath}`);
 
-        // Add a small delay between queries to avoid overwhelming the API
         if (queryIndex < queries.length - 1) {
           console.log("Waiting 2 seconds before next query...");
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -538,12 +609,10 @@ async function main() {
 
   try {
     if (!command) {
-      // Default behavior when running `bun run .`
       const ballerinaDir = "ballerina";
       console.log(`No command provided. Running default pipeline...`);
       await ragSystem.indexChunks(ballerinaDir);
 
-      // Check if user_queries.txt exists and process it
       const queriesFile = "user_queries.txt";
       try {
         if (statSync(queriesFile).isFile()) {
@@ -551,7 +620,6 @@ async function main() {
           await processUserQueries(ragSystem, queriesFile, 5);
         }
       } catch (error) {
-        // File doesn't exist, run default query
         const defaultQuery = process.env.DEFAULT_QUERY || "list all functions";
         console.log(`Running default query: "${defaultQuery}"`);
         await ragSystem.saveContextToFile(defaultQuery, 5);
@@ -567,7 +635,6 @@ async function main() {
         break;
 
       case "chunk":
-        // New command to only chunk and save without indexing
         await ragSystem.chunkAndSave(arg1 || "ballerina");
         break;
 
@@ -580,7 +647,6 @@ async function main() {
         break;
 
       case "queries":
-        // New command to process queries from file
         const queriesFile = arg1 || "user_queries.txt";
         const limit = parseInt(arg2 ?? "5");
         await processUserQueries(ragSystem, queriesFile, limit);

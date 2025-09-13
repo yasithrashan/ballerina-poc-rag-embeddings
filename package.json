@@ -13,5 +13,8 @@
     "@pinecone-database/pinecone": "^6.1.2",
     "@qdrant/js-client-rest": "^1.15.1",
     "dotenv": "^17.2.2"
+  },
+  "scripts": {
+    "start": "bun run ./src/main.ts"
   }
 }

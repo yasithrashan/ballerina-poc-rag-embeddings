@@ -38,3 +38,6 @@ ballerina/
 tests/
 context_files/
 user_queries.txt
+tool_response/
+llm_result/
+api_docs/

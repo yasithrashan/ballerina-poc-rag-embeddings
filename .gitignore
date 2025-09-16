@@ -41,3 +41,4 @@ user_queries.txt
 tool_response/
 llm_result/
 api_docs/
+embedding_response.json

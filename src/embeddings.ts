@@ -1,4 +1,5 @@
-import type { VoyageEmbeddingResponse, Chunk } from "./types";
+import type { VoyageEmbeddingResponse } from "./types";
+import fs from 'fs/promises';
 
 export class EmbeddingsService {
     private voyageApiKey: string;
@@ -25,45 +26,34 @@ export class EmbeddingsService {
             const errorText = await response.text();
             throw new Error(`VoyageAI API error: ${response.status} ${response.statusText} - ${errorText}`);
         }
-
         const rawData = await response.json();
+        await fs.writeFile(`embedding_response.json`, JSON.stringify(rawData, null, 2), "utf-8");
+
         if (!this.isVoyageEmbeddingResponse(rawData)) {
             throw new Error("Invalid response format from VoyageAI API");
         }
 
         const data: VoyageEmbeddingResponse = rawData;
-        return data.data.map(item => item.embedding);
+        const embeddings = data.data.map(item => item.embedding);
+        return embeddings;
     }
 
-    private isVoyageEmbeddingResponse(data: any): data is VoyageEmbeddingResponse {
+    private isVoyageEmbeddingResponse(data: unknown): data is VoyageEmbeddingResponse {
         return (
-            data &&
-            typeof data === 'object' &&
-            Array.isArray(data.data) &&
-            data.data.every((item: any) =>
-                item &&
-                typeof item === 'object' &&
-                Array.isArray(item.embedding) &&
-                typeof item.index === 'number'
+            typeof data === "object" &&
+            data !== null &&
+            (data as any).object === "list" &&
+            Array.isArray((data as any).data) &&
+            (data as any).data.every(
+                (item: any) =>
+                    item.object === "embedding" &&
+                    typeof item.index === "number" &&
+                    Array.isArray(item.embedding) &&
+                    item.embedding.every((v: any) => typeof v === "number")
             ) &&
-            typeof data.model === 'string' &&
-            data.usage &&
-            typeof data.usage.total_tokens === 'number'
+            typeof (data as any).model === "string" &&
+            typeof (data as any).usage?.total_tokens === "number"
         );
     }
 
-    // Updated to use new chunk structure
-    prepareTextForEmbedding(chunk: Chunk): string {
-        let text = `Type: ${chunk.metadata.type}\n`;
-
-        if (chunk.metadata.name) text += `Name: ${chunk.metadata.name}\n`;
-        if (chunk.metadata?.servicePath) text += `Service: ${chunk.metadata.servicePath}\n`;
-        if (chunk.metadata?.httpMethod) text += `HTTP Method: ${chunk.metadata.httpMethod}\n`;
-        if (chunk.metadata?.returnType && chunk.metadata.returnType !== "void") {
-            text += `Returns: ${chunk.metadata.returnType}\n`;
-        }
-
-        text += `Content:\n${chunk.content}`;
-        return text;
-    }
 }

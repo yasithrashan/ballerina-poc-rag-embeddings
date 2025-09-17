@@ -110,13 +110,13 @@ Your task is to expand and organize the relevant Ballerina code based on the use
 
 Structure your response using markdown with exactly these sections in this order (omit any section that has no relevant content):
 
-## Imports
-## Types
-## Configuration Variables
-## Module Level Variables
-## Services
-## Resources
-## Matching Resources
+## Filename
+    ## Imports
+    ## Configuration Variables
+    ## Module Level Variables
+    ## Services
+    ## Resources
+    ## Matching Resources
 
 Present all code using proper markdown code blocks with Ballerina syntax highlighting:
 

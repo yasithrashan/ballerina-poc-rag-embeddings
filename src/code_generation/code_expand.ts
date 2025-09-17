@@ -65,9 +65,6 @@ export async function expandCode(params: CodeExpanderParams): Promise<string> {
             chunksContext += `\`\`\`ballerina\n${chunk.payload.content}\n\`\`\`\n\n`;
         });
 
-        console.log(chunksContext);
-        console.log(allBalContent);
-
         // Create comprehensive system prompt for code expansion
         const systemPrompt = `
 You are a code analysis assistant that helps developers understand and organize relevant Ballerina code based on their queries. Your task is to analyze Ballerina source code files, identify code relevant to a user's question, and present it in a structured, organized format.
@@ -199,14 +196,55 @@ ${text}
 
 // Example usage
 export async function main() {
+    console.log('Expanding the code...');
     try {
-        const result = await expandCode({
-            chunksFilePath: "./relevant_chunks/1.json",
-            projectPath: "./ballerina",
-            outputDir: "expand_code"
+        const chunksDir = "./relevant_chunks";
+        const projectPath = "./ballerina";
+        const outputDir = "expand_code";
+
+        // Ensure output directory exists
+        if (!fs.existsSync(outputDir)) {
+            fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Get all JSON files in relevant_chunks directory
+        const files = fs.readdirSync(chunksDir).filter(f => f.endsWith(".json"));
+
+        if (files.length === 0) {
+            throw new Error("No relevant_chunks JSON files found.");
+        }
+
+        // Sort numerically if files are named 1.json, 2.json, ...
+        files.sort((a, b) => {
+            const numA = parseInt(path.basename(a, ".json"));
+            const numB = parseInt(path.basename(b, ".json"));
+            return numA - numB;
         });
 
-        console.log(`Code expansion completed: ${result}`);
+        // Process each JSON file
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const chunksFilePath = path.join(chunksDir, file as string);
+
+            console.log(`Processing: ${chunksFilePath}`);
+
+            // Run expandCode
+            const outputPath = await expandCode({
+                chunksFilePath,
+                projectPath,
+                outputDir,
+            });
+
+            // Rename output to sequential number (1.md, 2.md, ...)
+            const mdFileName = `${i + 1}.md`;
+            const newOutputPath = path.join(outputDir, mdFileName);
+
+            fs.renameSync(outputPath, newOutputPath);
+
+            console.log(`Saved expansion: ${newOutputPath}`);
+        }
+
+        console.log("All queries processed successfully!");
     } catch (error) {
         console.error("Error:", error);
     }

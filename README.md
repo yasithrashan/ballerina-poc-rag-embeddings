@@ -1,259 +1,197 @@
-# Code Embedding and Retrieval for BI Copilot
+# Ballerina Code Intelligence System
 
-A powerful Retrieval-Augmented Generation (RAG) system specifically designed for indexing and querying Ballerina code. This system chunks Ballerina source code into logical components, creates embeddings using VoyageAI, stores them in Qdrant vector database, and enables semantic search for code understanding and documentation.
-
-## Features
-
-- **Intelligent Code Chunking**: Automatically parses and chunks Ballerina code into logical components:
-  - Import statements
-  - Configurable variables
-  - Module-level variables
-  - Type definitions and records
-  - Function signatures and bodies
-  - Service definitions and resource functions
-
-- **Vector Embeddings**: Uses VoyageAI's `voyage-code-3` model for high-quality code embeddings
-- **Vector Database**: Stores and queries embeddings using Qdrant
-- **Batch Processing**: Processes multiple user queries from files (supports both text and JSON formats)
-- **Context Export**: Saves query results to organized text files for easy review
-- **Modular Architecture**: Clean separation of concerns with dedicated modules for each functionality
-- **Flexible CLI**: Multiple commands for different use cases
+A sophisticated Retrieval-Augmented Generation (RAG) system designed for semantic code analysis and intelligent querying of Ballerina codebases. This system provides deep understanding of Ballerina code structure through intelligent chunking, vector embeddings, and semantic search capabilities.
 
 ## Prerequisites
 
-- Node.js (v16 or higher)
-- Bun runtime
-- Qdrant server running locally or remotely
-- VoyageAI API key
+- **Node.js**: Version 16 or higher
+- **Bun runtime**: For optimal performance
+- **Qdrant server**: Vector database (local or remote)
+- **VoyageAI API key**: For code embeddings
 
-## Installation
+## Quick Start
 
-1. Clone the repository and install dependencies:
+### 1. Installation
+
 ```bash
+# Clone and install dependencies
 bun install
 # or
 npm install
+
+# Install Qdrant client
+bun add @qdrant/js-client-rest
 ```
 
-2. Install required dependencies:
+### 2. Start Qdrant Server
+
 ```bash
-bun add @qdrant/js-client-rest
-# or
-npm install @qdrant/js-client-rest
+# Using Docker (recommended)
+docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
+
 # Access web UI at http://localhost:6333/dashboard
 ```
 
-3. Start Qdrant server (using Docker):
-```bash
-docker run -p 6333:6333 qdrant/qdrant
-```
-
-## Configuration
-
-Set up your environment variables:
+### 3. Configure Environment
 
 ```bash
 export VOYAGE_API_KEY="your_voyage_api_key_here"
 export QDRANT_URL="http://localhost:6333"  # Optional, defaults to localhost
-export DEFAULT_QUERY="list all functions"  # Optional default query
 ```
 
-## Architecture
+### 4. Run the System
 
-The system is built with a modular architecture for better maintainability and testability:
-
-```
-src/
-├── main.ts                 # Main entry point and CLI interface
-├── types.ts               # Type definitions and interfaces
-├── file_extractor.ts      # Ballerina file loading logic
-├── chunker.ts             # Code chunking and JSON export logic
-├── embeddings.ts          # VoyageAI embeddings service
-├── qdrant.ts              # Qdrant vector database operations
-├── queries.ts             # Query processing and context file generation
-└── rag_system.ts          # Main RAG system orchestrator
-```
-
-### Core Modules
-
-#### `BallerinaRAGSystem` (rag_system.ts)
-The main orchestrator that coordinates all components:
-- File loading and chunking
-- Embedding generation and indexing
-- Query processing
-
-#### `BallerinaFileExtractor` (file_extractor.ts)
-Handles Ballerina source file operations:
-- Recursive directory scanning for `.bal` files
-- File content reading
-
-#### `BallerinaChunker` (chunker.ts)
-Processes Ballerina code into logical chunks:
-- Smart regex-based parsing
-- Chunk metadata extraction
-- JSON export functionality
-
-#### `EmbeddingsService` (embeddings.ts)
-Manages VoyageAI integration:
-- Text embedding generation
-- Chunk text preparation for embedding
-- API response validation
-
-#### `QdrantService` (qdrant.ts)
-Handles vector database operations:
-- Collection management
-- Vector storage and retrieval
-- Similarity search
-
-#### `QueryProcessor` (queries.ts)
-Processes user queries and generates context files:
-- Single and batch query processing
-- Context file generation
-- Support for both text and JSON query formats
-
-## Usage
-
-### Basic Commands
-
-#### 1. Default Pipeline
-Runs the complete indexing pipeline and processes queries:
 ```bash
+# Index Ballerina code and process queries
 bun start
-# or
+
+# Or specify a custom directory
 bun run src/main.ts
 ```
-This will:
-- Index all `.bal` files in the `ballerina/` directory
-- Process queries from `user_queries.txt` if it exists
-- Run a default query if no queries file is found
 
-#### 2. Index Ballerina Code
-Index a specific directory of Ballerina files:
-```bash
-bun run src/main.ts index [directory]
-bun run src/main.ts index ballerina        # Index the 'ballerina' directory
-bun run src/main.ts index ../my-project    # Index a different directory
+## Usage Guide
+
+### Core Components
+
+#### BallerinaChunker
+The heart of the code analysis system with sophisticated parsing capabilities:
+
+- **Large Function Splitting**: Automatically splits oversized functions while maintaining logical boundaries
+- **Resource Decomposition**: Separates HTTP resource signatures from implementation bodies
+- **Duplicate Detection**: Content-based deduplication using SHA-256 hashes
+- **Context Preservation**: Maintains relationships between related code components
+
+#### Enhanced Metadata System
+Each code chunk includes comprehensive metadata:
+
+```typescript
+interface EnhancedChunk {
+    content: string;
+    metadata: {
+        type: string;           // Code element type
+        name: string | null;    // Element name
+        file: string;           // Source filename
+        line: number;           // Start line number
+        endLine: number;        // End line number
+        position: {             // Precise positioning
+            start: { line: number; column: number };
+            end: { line: number; column: number };
+        };
+        id: string;             // Hierarchical identifier
+        hash: string;           // Content hash for deduplication
+        moduleName: string;     // Ballerina module name
+        // Type-specific metadata...
+    };
+}
 ```
 
-#### 3. Chunk Only (No Indexing)
-Generate chunks and save to JSON without indexing to vector database:
-```bash
-bun run src/main.ts chunk [directory]
-bun run src/main.ts chunk ballerina
-```
-
-#### 4. Single Query
-Run a single query against the indexed code:
-```bash
-bun run src/main.ts query "How do I create an HTTP service?" 5
-bun run src/main.ts query "Show me all error handling functions"
-```
-
-#### 5. Batch Query Processing
-Process multiple queries from a text file or JSON file:
-```bash
-bun run src/main.ts queries user_queries.txt 5
-bun run src/main.ts queries queries.json 10
-```
-
-#### 6. Collection Information
-View Qdrant collection statistics:
-```bash
-bun run src/main.ts info
-```
-
-### Query File Formats
-
-#### Text Format
-Create a `user_queries.txt` file with one query per line:
-```
-# This is a comment and will be ignored
-How do I create an HTTP service in Ballerina?
-What are the available error handling mechanisms?
-Show me examples of database connections
-How do I handle JSON in Ballerina?
-What are the authentication options?
-```
-
-#### JSON Format
-Create a JSON file with query objects containing ID and query:
+### Query Processing
+#### JSON Query Format
+For structured queries with IDs, create a JSON file (e.g., `user_queries.json`):
 ```json
 [
-  {
-    "id": 1,
-    "query": "How do I create an HTTP service in Ballerina?"
-  },
-  {
-    "id": 2,
-    "query": "What are the available error handling mechanisms?"
-  },
-  {
-    "id": 3,
-    "query": "Show me examples of database connections"
-  }
+    {
+        "id": 1,
+        "query": "Your query text here"
+    },
+    {
+        "id": 2,
+        "query": "Another query"
+    }
 ]
 ```
 
-Lines starting with `#` in text format are treated as comments and ignored.
+Then run:
+```bash
+bun start
+```
 
 ## Output Structure
 
-### Chunks JSON Output
-The system saves chunked code to `tests/` directory:
+### Code Chunks Export
+Generated chunks are saved with comprehensive statistics:
 ```
 tests/
-├── chunks_ballerina_2024-01-15T10-30-00-000Z.json
-└── chunks_my_project_2024-01-15T11-00-00-000Z.json
+└── chunks_ballerina_2025-01-15T10-30-00-000Z.json
 ```
 
-### Context Files Output
-Query results are saved to organized directories:
+The JSON output includes:
+- **Metadata**: Source directory, generation timestamp, chunk statistics
+- **Type Distribution**: Count of each code element type
+- **Module Statistics**: Chunks per module breakdown
+- **Size Metrics**: Average and maximum chunk sizes
+- **Documentation Coverage**: Chunks with extracted doc comments
 
-For JSON format queries (using query IDs):
+### Query Results
+Results are organized in the `relevant_chunks/` directory:
 ```
-context_files/
-├── 1.txt
-├── 2.txt
-└── 3.txt
-```
-
-For text format queries:
-```
-context_files/
-├── query_1/
-│   └── context_How_do_I_create_2024-01-15T10-30-00-000Z.txt
-├── query_2/
-│   └── context_What_are_the_available_2024-01-15T10-30-00-000Z.txt
-└── single_queries/
-    └── context_Show_me_all_functions_2024-01-15T10-30-00-000Z.txt
+relevant_chunks/
+├── 1.json              # Results for query ID 1
+├── 2.json              # Results for query ID 2
+└── ...
 ```
 
-## API Integration
+Each result file contains:
+```json
+{
+    "userQuery": "How to create HTTP services?",
+    "relevantChunks": [
+        {
+            "score": 0.89,
+            "payload": {
+                "content": "service /api on new http:Listener(8080) { ... }",
+                "metadata": { /* detailed metadata */ }
+            }
+        }
+    ]
+}
+```
 
-### VoyageAI Configuration
-- **Model**: `voyage-code-3` (optimized for code)
-- **Embedding Dimension**: 1024
-- **Rate Limiting**: Built-in delays between requests
+## Configuration Options
 
-### Qdrant Configuration
-- **Distance Metric**: Cosine similarity
-- **Collection Name**: `ballerina_code_chunks`
-- **Vector Dimension**: 1024
+### Environment Variables
+```bash
+VOYAGE_API_KEY=your_api_key              # Required: VoyageAI API key
+QDRANT_URL=http://localhost:6333         # Optional: Qdrant server URL
+BAL_FILE_PATH=./ballerina               # Optional: Ballerina source directory
+```
 
+### System Parameters
+```typescript
+// Configurable in chunker.ts
+const MAX_CHUNK_SIZE = 5000;            // Maximum characters per chunk
+const COLLECTION_NAME = "ballerina_code_chunks";  // Qdrant collection name
+const EMBEDDING_MODEL = "voyage-code-3"; // VoyageAI model
+```
 
-### Batch Processing Settings
-- **Batch Size**: 10 chunks per embedding request
-- **Error Handling**: Continues processing even if individual queries fail
-- **Memory Management**: Efficient chunk processing for large codebases
+## Supported Ballerina Constructs
 
+The system recognizes and processes:
 
-## Support
+| Construct | Detection | Metadata Extracted |
+|-----------|-----------|-------------------|
+| Imports | `import ballerina/http;` | Package name, alias |
+| Configurable Variables | `configurable string host = ?;` | Type, name, default |
+| Type Definitions | `type Person record {...}` | Name, visibility, structure |
+| Functions | `public function getData() returns json` | Signature, modifiers, parameters, return type |
+| Services | `service /api on listener {...}` | Path, listener, resources |
+| Resources | `resource function get users() {...}` | HTTP method, path, parameters |
+| Classes | `public client class HttpClient {...}` | Name, modifiers, type |
+| Constants | `const string API_URL = "...";` | Type, name, visibility |
 
-For issues and questions:
-- Create an issue in the repository
-- Check the troubleshooting section
-- Review the VoyageAI and Qdrant documentation
+## Contributing
+
+This system is designed with modularity in mind. Key extension points:
+
+- **Language Support**: Modify `chunker.ts` for other programming languages
+- **Embedding Models**: Update `embeddings.ts` for different providers
+- **Vector Databases**: Extend `qdrant.ts` for alternative vector stores
+- **Query Processing**: Enhance `queries.ts` for advanced query types
+
+## License
+
+This is a research and development system. Please ensure compliance with VoyageAI and Qdrant usage terms.
 
 ---
 
-**Note**: This is a Proof of Concept (PoC) system specifically designed for Ballerina code but can be adapted for other programming languages by modifying the chunking regular expressions and patterns in the `chunker.ts` module.
+**Note**: This system represents a sophisticated approach to code intelligence, specifically optimized for Ballerina's unique language constructs and patterns. The architecture supports extension to other languages through the modular chunking system.

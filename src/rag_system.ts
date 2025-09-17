@@ -1,53 +1,56 @@
 import type { Chunk } from "./types";
-import { BallerinaFileExtractor } from "./file_extractor";
+import { loadFiles, readFiles } from "./file_extractor";
 import { BallerinaChunker } from "./chunker";
-import { EmbeddingsService } from "./embeddings";
-import { QdrantService } from "./qdrant";
+import { getEmbeddings } from "./embeddings";
+import { createQdrantClient, createCollection, upsertChunks } from "./qdrant";
+import { saveRelevantChunksFromJson } from "./queries";
 
-export class BallerinaRAGSystem {
-    private fileExtractor: BallerinaFileExtractor;
-    private chunker: BallerinaChunker;
-    private embeddingsService: EmbeddingsService;
-    private qdrantService: QdrantService;
+const QUERIES = "user_queries.txt";
 
-    constructor(qdrantUrl: string = "http://localhost:6333", voyageApiKey: string) {
-        this.fileExtractor = new BallerinaFileExtractor();
-        this.chunker = new BallerinaChunker();
-        this.embeddingsService = new EmbeddingsService(voyageApiKey);
-        this.qdrantService = new QdrantService(qdrantUrl);
+export async function ragPipeline(
+    ballerinaDir: string,
+    voyageApiKey: string,
+    qdrantUrl: string = "http://localhost:6333"
+): Promise<void> {
+    const chunker = new BallerinaChunker();
+    const qdrantClient = createQdrantClient(qdrantUrl);
+
+    console.log("Loading Ballerina files...");
+    const ballerinaFiles = loadFiles(ballerinaDir);
+
+    console.log("Chunking code...");
+    let allChunks: Chunk[] = [];
+    for (const file of ballerinaFiles) {
+        const code = readFiles(file);
+        allChunks = allChunks.concat(chunker.chunkBallerinaCode(code, file));
     }
 
-    async indexChunks(ballerinaDir: string): Promise<void> {
-        console.log("Loading Ballerina files...");
-        const ballerinaFiles = this.fileExtractor.loadBallerinaFiles(ballerinaDir);
+    console.log(`Generated ${allChunks.length} chunks`);
 
-        console.log("Chunking code...");
-        let allChunks: Chunk[] = [];
-        for (const file of ballerinaFiles) {
-            const code = this.fileExtractor.readFile(file);
-            allChunks = allChunks.concat(this.chunker.chunkBallerinaCode(code, file));
-        }
+    // Save chunks to JSON file in tests folder
+    chunker.saveChunksToJson(allChunks, ballerinaDir);
 
-        console.log(`Generated ${allChunks.length} chunks`);
+    // Create Qdrant collection
+    await createCollection(qdrantClient);
 
-        // Save chunks to JSON file in tests folder
-        this.chunker.saveChunksToJson(allChunks, ballerinaDir);
+    // Prepare texts for embeddings
+    const textsForEmbedding = allChunks.map((chunk) => chunk.content);
+    console.log(textsForEmbedding);
 
-        // Create Qdrant collection
-        await this.qdrantService.createCollection();
+    // Generate embeddings
+    console.log("Generating embeddings with VoyageAI...");
+    const embeddings = await getEmbeddings(textsForEmbedding, voyageApiKey);
 
-        // Prepare texts for Embeddings
-        const textsForEmbedding = allChunks.map(chunk => chunk.content);
+    // Upserting chunks
+    console.log("Upserting chunks into Qdrant...");
+    await upsertChunks(qdrantClient, allChunks, embeddings, textsForEmbedding);
 
-        // Generate Embeddings
-        console.log('Generation embeddings with VoyageAI...')
-        const embeddings = await this.embeddingsService.getEmbeddings(textsForEmbedding);
+    console.log("All the chunks indexed successfully!");
+}
 
-        // Upserting chunks
-        console.log('Upserting chunks into Qdrant...')
-        await this.qdrantService.upsertChunks(allChunks, embeddings, textsForEmbedding);
-
-        console.log('All the chunks indexed successfully!');
-    }
-
+export async function embedUserQuery(path: string) {
+    // Embedding the user query
+    const queryEmbedding = await saveRelevantChunksFromJson(path);
+    const jsonFile = JSON.stringify(queryEmbedding, null, 2);
+    console.log(jsonFile);
 }

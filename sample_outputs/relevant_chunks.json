@@ -1,0 +1,287 @@
+{
+  "userQuery": "Update the pagination logic so it validates 'page' and 'limit' values, returning a 400 Bad Request if they are less than or equal to zero.",
+  "relevantChunks": [
+    {
+      "score": 0.67365384,
+      "payload": {
+        "content": "int startIndex = (page - 1) * 'limit;",
+        "metadata": {
+          "type": "module_variable",
+          "name": "int",
+          "visibility": "private",
+          "line": 60,
+          "endLine": 60,
+          "position": {
+            "start": {
+              "line": 60,
+              "column": 1
+            },
+            "end": {
+              "line": 60,
+              "column": 46
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:variable:int",
+          "hash": "6af3be407d14f70d"
+        },
+        "line": 60,
+        "endLine": 60,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:variable:int",
+        "hash": "6af3be407d14f70d",
+        "textForEmbedding": "int startIndex = (page - 1) * 'limit;"
+      }
+    },
+    {
+      "score": 0.6564015,
+      "payload": {
+        "content": "resource function get books(int page = 1, int 'limit = maxBooksPerPage) returns PaginatedBooks|http:InternalServerError {\ntotalRequests += 1;\n\n        Book[] allBooks = bookStore.toArray();\n        int totalCount = allBooks.length();\n        int startIndex = (page - 1) * 'limit;\n        int endIndex = startIndex + 'limit;\n\n        if startIndex >= totalCount {\n            PaginatedBooks emptyResult = {\n                books: [],\n                totalCount: totalCount,\n                currentPage: page,\n                totalPages: (totalCount + 'limit - 1) / 'limit\n            };\n            return emptyResult;\n        }\n\n        if endIndex > totalCount {\n            endIndex = totalCount;\n        }\n\n        Book[] paginatedBooks = [];\n        int index = startIndex;\n        while index < endIndex {\n            paginatedBooks.push(allBooks[index]);\n            index += 1;\n        }\n\n        PaginatedBooks result = {\n            books: paginatedBooks,\n            totalCount: totalCount,\n            currentPage: page,\n            totalPages: (totalCount + 'limit - 1) / 'limit\n        };\n\n        return result;\n}",
+        "metadata": {
+          "type": "resource",
+          "name": "get books",
+          "servicePath": "/bookstore",
+          "serviceListener": "new http:Listener(servicePort)",
+          "httpMethod": "get",
+          "resourcePath": "books",
+          "fullPath": "/bookstore/books",
+          "parameters": [
+            "int page = 1",
+            "int 'limit = maxBooksPerPage"
+          ],
+          "returnType": "PaginatedBooks|http:InternalServerError",
+          "isComplete": true,
+          "line": 2,
+          "endLine": 7,
+          "position": {
+            "start": {
+              "line": 2,
+              "column": 21
+            },
+            "end": {
+              "line": 7,
+              "column": 32
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:service:bookstore:get:books",
+          "hash": "1a3e29413cc7e999"
+        },
+        "line": 2,
+        "endLine": 7,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:service:bookstore:get:books",
+        "hash": "1a3e29413cc7e999",
+        "textForEmbedding": "resource function get books(int page = 1, int 'limit = maxBooksPerPage) returns PaginatedBooks|http:InternalServerError {\ntotalRequests += 1;\n\n        Book[] allBooks = bookStore.toArray();\n        int totalCount = allBooks.length();\n        int startIndex = (page - 1) * 'limit;\n        int endIndex = startIndex + 'limit;\n\n        if startIndex >= totalCount {\n            PaginatedBooks emptyResult = {\n                books: [],\n                totalCount: totalCount,\n                currentPage: page,\n                totalPages: (totalCount + 'limit - 1) / 'limit\n            };\n            return emptyResult;\n        }\n\n        if endIndex > totalCount {\n            endIndex = totalCount;\n        }\n\n        Book[] paginatedBooks = [];\n        int index = startIndex;\n        while index < endIndex {\n            paginatedBooks.push(allBooks[index]);\n            index += 1;\n        }\n\n        PaginatedBooks result = {\n            books: paginatedBooks,\n            totalCount: totalCount,\n            currentPage: page,\n            totalPages: (totalCount + 'limit - 1) / 'limit\n        };\n\n        return result;\n}"
+      }
+    },
+    {
+      "score": 0.65261424,
+      "payload": {
+        "content": "PaginatedBooks emptyResult = {\n                books: [],\n                totalCount: totalCount,\n                currentPage: page,\n                totalPages: (totalCount + 'limit - 1) / 'limit\n            };",
+        "metadata": {
+          "type": "module_variable",
+          "name": "PaginatedBooks",
+          "visibility": "private",
+          "line": 64,
+          "endLine": 69,
+          "position": {
+            "start": {
+              "line": 64,
+              "column": 1
+            },
+            "end": {
+              "line": 69,
+              "column": 15
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:variable:PaginatedBooks",
+          "hash": "c97f95929e407e70"
+        },
+        "line": 64,
+        "endLine": 69,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:variable:PaginatedBooks",
+        "hash": "c97f95929e407e70",
+        "textForEmbedding": "PaginatedBooks emptyResult = {\n                books: [],\n                totalCount: totalCount,\n                currentPage: page,\n                totalPages: (totalCount + 'limit - 1) / 'limit\n            };"
+      }
+    },
+    {
+      "score": 0.6344594,
+      "payload": {
+        "content": "PaginatedBooks result = {\n            books: paginatedBooks,\n            totalCount: totalCount,\n            currentPage: page,\n            totalPages: (totalCount + 'limit - 1) / 'limit\n        };",
+        "metadata": {
+          "type": "module_variable",
+          "name": "PaginatedBooks",
+          "visibility": "private",
+          "line": 84,
+          "endLine": 89,
+          "position": {
+            "start": {
+              "line": 84,
+              "column": 1
+            },
+            "end": {
+              "line": 89,
+              "column": 11
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:variable:PaginatedBooks",
+          "hash": "80d68a823efa97de"
+        },
+        "line": 84,
+        "endLine": 89,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:variable:PaginatedBooks",
+        "hash": "80d68a823efa97de",
+        "textForEmbedding": "PaginatedBooks result = {\n            books: paginatedBooks,\n            totalCount: totalCount,\n            currentPage: page,\n            totalPages: (totalCount + 'limit - 1) / 'limit\n        };"
+      }
+    },
+    {
+      "score": 0.6048896,
+      "payload": {
+        "content": "configurable int maxBooksPerPage = 10;",
+        "metadata": {
+          "type": "configurable_variable",
+          "name": "maxBooksPerPage",
+          "dataType": "int",
+          "line": 8,
+          "endLine": 8,
+          "position": {
+            "start": {
+              "line": 8,
+              "column": 1
+            },
+            "end": {
+              "line": 8,
+              "column": 39
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:configurable:maxBooksPerPage",
+          "hash": "82058f20caaff18a"
+        },
+        "line": 8,
+        "endLine": 8,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:configurable:maxBooksPerPage",
+        "hash": "82058f20caaff18a",
+        "textForEmbedding": "configurable int maxBooksPerPage = 10;"
+      }
+    },
+    {
+      "score": 0.5805452,
+      "payload": {
+        "content": "Book[] paginatedBooks = [];",
+        "metadata": {
+          "type": "module_variable",
+          "name": "Book[]",
+          "visibility": "private",
+          "line": 77,
+          "endLine": 77,
+          "position": {
+            "start": {
+              "line": 77,
+              "column": 1
+            },
+            "end": {
+              "line": 77,
+              "column": 36
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:variable:Book[]",
+          "hash": "297ebc001d69355a"
+        },
+        "line": 77,
+        "endLine": 77,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:variable:Book[]",
+        "hash": "297ebc001d69355a",
+        "textForEmbedding": "Book[] paginatedBooks = [];"
+      }
+    },
+    {
+      "score": 0.55267155,
+      "payload": {
+        "content": "type\npublic type PaginatedBooks record {|\n    Book[] books;\n    int totalCount;\n    int currentPage;\n    int totalPages;\n|};",
+        "metadata": {
+          "type": "type_definition",
+          "name": "public",
+          "visibility": "private",
+          "line": 25,
+          "endLine": 31,
+          "position": {
+            "start": {
+              "line": 25,
+              "column": 24
+            },
+            "end": {
+              "line": 31,
+              "column": 4
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "types.bal",
+          "id": "ballerina:types:type:public",
+          "hash": "126d87623ff2b4b7"
+        },
+        "line": 25,
+        "endLine": 31,
+        "moduleName": "ballerina",
+        "file": "types.bal",
+        "chunkId": "ballerina:types:type:public",
+        "hash": "126d87623ff2b4b7",
+        "textForEmbedding": "type\npublic type PaginatedBooks record {|\n    Book[] books;\n    int totalCount;\n    int currentPage;\n    int totalPages;\n|};"
+      }
+    },
+    {
+      "score": 0.5509554,
+      "payload": {
+        "content": "int endIndex = startIndex + 'limit;",
+        "metadata": {
+          "type": "module_variable",
+          "name": "int",
+          "visibility": "private",
+          "line": 61,
+          "endLine": 61,
+          "position": {
+            "start": {
+              "line": 61,
+              "column": 1
+            },
+            "end": {
+              "line": 61,
+              "column": 44
+            }
+          },
+          "moduleName": "ballerina",
+          "file": "main.bal",
+          "id": "ballerina:main:variable:int",
+          "hash": "e59bf92d2710891c"
+        },
+        "line": 61,
+        "endLine": 61,
+        "moduleName": "ballerina",
+        "file": "main.bal",
+        "chunkId": "ballerina:main:variable:int",
+        "hash": "e59bf92d2710891c",
+        "textForEmbedding": "int endIndex = startIndex + 'limit;"
+      }
+    }
+  ]
+}

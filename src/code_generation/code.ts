@@ -54,10 +54,6 @@ const LANG_LIB = LANGLIBS as Library[];
 function loadApiDocsForQuery(queryId: number): Library {
     const apiDocsPath = path.join(process.cwd(), "./api_docs", `${queryId}.json`);
 
-    if (!fs.existsSync(apiDocsPath)) {
-        throw new Error(`API docs not found for query ${queryId} at path: ${apiDocsPath}`);
-    }
-
     try {
         const apiDocsContent = fs.readFileSync(apiDocsPath, "utf-8");
         return JSON.parse(apiDocsContent) as Library;
@@ -279,5 +275,3 @@ export async function processAllQueries(): Promise<void> {
         throw error;
     }
 }
-
-processAllQueries();

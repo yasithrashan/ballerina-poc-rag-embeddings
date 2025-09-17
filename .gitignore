@@ -38,7 +38,7 @@ ballerina/
 tests/
 user_queries.txt
 tool_response/
-llm_result/
+llm_response/
 api_docs/
 embedding_response.json
 relevant_chunks

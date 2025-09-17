@@ -70,10 +70,10 @@ export async function ragPipeline(
             const relevantChunks = await searchRelevantChunks(qdrantClient, queryEmbedding);
 
             console.log(`\nUser Query: ${userQuery.query}`);
-            console.log("Top relevant chunks:");
+            // console.log("Top relevant chunks:");
 
             const dataToSave = relevantChunks.map((chunk, idx) => {
-                console.log(`${idx + 1}. [Score: ${chunk.score}] ${chunk.payload.content}`);
+                // console.log(`${idx + 1}. [Score: ${chunk.score}] ${chunk.payload.content}`);
                 return {
                     score: chunk.score,
                     payload: chunk.payload

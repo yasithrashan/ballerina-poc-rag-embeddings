@@ -182,9 +182,9 @@ ${text}
         // Write the report
         fs.writeFileSync(outputPath, reportContent, "utf-8");
 
-        console.log("Code expansion completed successfully!");
+        // console.log("Code expansion completed successfully!");
         console.log(`Output saved to: ${outputPath}`);
-        console.log(`Processed ${balFiles.length} .bal files and ${chunkCount} relevant chunks`);
+        // console.log(`Processed ${balFiles.length} .bal files and ${chunkCount} relevant chunks`);
 
         return outputPath;
 
@@ -195,7 +195,7 @@ ${text}
 }
 
 // Example usage
-export async function main() {
+export async function codeExpander() {
     console.log('Expanding the code...');
     try {
         const chunksDir = "./relevant_chunks";
@@ -249,5 +249,3 @@ export async function main() {
         console.error("Error:", error);
     }
 }
-
-main();

@@ -3,7 +3,7 @@ import { loadFiles, readFiles } from "./file_extractor";
 import { BallerinaChunker } from "./chunker";
 import { getEmbeddings } from "./embeddings";
 import { createQdrantClient, createCollection, upsertChunks } from "./qdrant";
-import { saveRelevantChunksFromJson } from "./queries";
+import { chunkUserQuery } from "./queries";
 
 const QUERIES = "user_queries.txt";
 
@@ -46,11 +46,16 @@ export async function ragPipeline(
     await upsertChunks(qdrantClient, allChunks, embeddings, textsForEmbedding);
 
     console.log("All the chunks indexed successfully!");
-}
 
-export async function embedUserQuery(path: string) {
+    // Chunk the user query
+    const userQueries = await chunkUserQuery(QUERIES);
+
     // Embedding the user query
-    const queryEmbedding = await saveRelevantChunksFromJson(path);
-    const jsonFile = JSON.stringify(queryEmbedding, null, 2);
-    console.log(jsonFile);
+    const userQueryTexts = userQueries.map(q => q.query);
+    const embededUserQuery = await getEmbeddings(userQueryTexts, voyageApiKey);
+
+    console.log(embededUserQuery);
+
+
+
 }

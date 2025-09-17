@@ -70,6 +70,24 @@ export async function upsertChunks(
   await qdrantClient.upsert(COLLECTION_NAME, { points });
 }
 
+// Get collection details
+export async function getCollection(
+  qdrantClient: QdrantClient,
+  collectionName: string = COLLECTION_NAME
+) {
+  try {
+    const collectionInfo = await qdrantClient.getCollection(collectionName);
+    return collectionInfo;
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      console.warn(`Collection "${collectionName}" does not exist.`);
+      return null;
+    }
+    throw err;
+  }
+}
+
+
 // Query relevant chunks from Qdrant
 export async function queryRelevantChunks(
   qdrantClient: QdrantClient,

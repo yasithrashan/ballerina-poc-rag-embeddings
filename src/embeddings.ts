@@ -1,4 +1,5 @@
 import type { VoyageEmbeddingResponse } from "./types";
+import { chunkUserQuery } from "./queries";
 import fs from 'fs/promises';
 
 export async function getEmbeddings(

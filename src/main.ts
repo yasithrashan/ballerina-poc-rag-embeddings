@@ -14,6 +14,7 @@ async function main() {
 
     const ragSystem = ragPipeline(BAL_FILE_PATH, voyageApiKey, qdrantUrl)
 
+
 }
 
 main()

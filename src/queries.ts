@@ -1,11 +1,7 @@
-import { readFileSync, mkdirSync } from "fs";
-
+import { readFileSync } from "fs";
 import type { QueryWithId } from "./types";
 
-
-export async function saveRelevantChunksFromJson(jsonFilePath: string, limit: number = 5, outputDir: string = "relevant_chunks") {
-    mkdirSync(outputDir, { recursive: true });
-
+export async function chunkUserQuery(jsonFilePath: string) {
     // Read and parse JSON file
     const fileContent = readFileSync(jsonFilePath, "utf-8");
     let queries: QueryWithId[];
@@ -13,18 +9,17 @@ export async function saveRelevantChunksFromJson(jsonFilePath: string, limit: nu
         queries = JSON.parse(fileContent);
     } catch (err) {
         console.error("Failed to parse JSON file:", err);
-        return;
+        return [];
     }
 
-    for (const queryItem of queries) {
+    const result = queries.map(queryItem => {
         const { id, query } = queryItem;
         const texts = query.split(" ");
-        console.log(texts);
-
-        console.log(`Processing query ID ${id}: ${query}`);
-
-    }
-
-    console.log("All queries processed successfully!");
+        return {
+            id,
+            query,
+            chunks: texts,
+        };
+    });
+    return result;
 }
-

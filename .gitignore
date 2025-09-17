@@ -36,9 +36,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Test Folders
 ballerina/
 tests/
-context_files/
 user_queries.txt
 tool_response/
 llm_result/
 api_docs/
 embedding_response.json
+relevant_chunks

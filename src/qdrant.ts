@@ -1,6 +1,5 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import type { Chunk } from "./types";
-import { getEmbeddings } from "./embeddings";
 
 const COLLECTION_NAME = "ballerina_code_chunks";
 
@@ -51,7 +50,7 @@ export async function upsertChunks(
         vector,
         payload: {
           content: chunk.content,
-          type: chunk.metadata,
+          metadata: chunk.metadata,
           line: chunk.metadata.line,
           endLine: chunk.metadata.endLine,
           moduleName: chunk.metadata.moduleName,
@@ -87,20 +86,22 @@ export async function getCollection(
   }
 }
 
-
-// Query relevant chunks from Qdrant
-export async function queryRelevantChunks(
+// Function to search Qdrant for top-k relevant chunks
+export async function searchRelevantChunks(
   qdrantClient: QdrantClient,
-  query: string,
-  voyageApiKey: string,
-  limit: number = 8
-): Promise<Array<{ score: number; payload: { content: string; metadata: Chunk["metadata"] } }>> {
-  if (!query) return [];
+  queryEmbedding: number[],
+  limit: number = 8,
+  collectionName: string = COLLECTION_NAME
+): Promise<{ score: number; payload: Chunk['metadata'] & { content: string } }[]> {
+  const searchResult = await qdrantClient.search(collectionName, {
+    vector: queryEmbedding,
+    limit,
+    with_payload: true,
+  });
 
-  // Generate embedding for query
-  const [queryEmbedding] = await getEmbeddings([query], voyageApiKey);
-  console.log("Query Embeddings", queryEmbedding);
-
-  // TODO: Add Qdrant search logic here...
-  return [];
+  // Map the results
+  return searchResult.map((res) => ({
+    score: res.score ?? 0,
+    payload: res.payload as Chunk['metadata'] & { content: string },
+  }));
 }

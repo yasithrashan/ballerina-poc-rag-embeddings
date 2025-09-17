@@ -12,7 +12,9 @@ async function main() {
 
     const BAL_FILE_PATH = './ballerina'
 
-    const ragSystem = ragPipeline(BAL_FILE_PATH, voyageApiKey, qdrantUrl)
+    const ragSystem = ragPipeline(BAL_FILE_PATH, voyageApiKey, qdrantUrl);
+
+    
 
 
 }

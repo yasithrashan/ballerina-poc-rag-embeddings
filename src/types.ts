@@ -32,3 +32,22 @@ export interface QueryWithId {
     id: number;
     query: string;
 }
+
+export interface RelevantChunk {
+    score: number;
+    payload: {
+        content: string;
+        metadata: {
+            type: string;
+            name: string;
+            visibility?: string;
+            line: number;
+            endLine: number;
+            file: string;
+            moduleName: string;
+            [key: string]: any;
+        };
+        file: string;
+        textForEmbedding: string;
+    };
+}

@@ -42,3 +42,4 @@ llm_result/
 api_docs/
 embedding_response.json
 relevant_chunks
+expand_code/
